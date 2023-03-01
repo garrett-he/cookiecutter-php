@@ -1,6 +1,6 @@
-# {{ cookiecutter.project_name }}
+# {{ cookiecutter.package_slug }}
 
-{{ cookiecutter.project_description }}
+{{ cookiecutter.package_description }}
 
 ## License
 {% if cookiecutter.license_id == 'Unlicense' %}
