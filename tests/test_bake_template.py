@@ -1,3 +1,4 @@
+import json
 import random
 from glob import glob
 
@@ -23,14 +24,19 @@ def test_create_project(cookies: Cookies):
 
 def generate_context() -> dict:
     return {
-        'project_name': f'{chance.word().capitalize()} {chance.word().capitalize()}',
-        'project_slug': f'{chance.word().lower()}-{chance.word().lower()}',
-        'project_description': chance.sentence(),
+        'package_vendor': f'{chance.word()}-{chance.word()}'.lower(),
+        'package_name': f'{chance.word()}-{chance.word()}'.lower(),
+        'package_description': chance.sentence(),
+        'package_keywords': f'{chance.word()},{chance.word()},{chance.word()}',
+        'package_type': chance.pickone(['library', 'project', 'metapackage', 'composer-plugin']),
         'author_name': chance.name(),
         'author_email': chance.email(),
         'license_id': chance.pickone([key for key in license_stubs.keys()]),
         'license_fullname': f'{chance.name()} <{chance.email()}>',
-        'license_year': str(random.randint(2000, 2023))
+        'license_year': str(random.randint(2000, 2023)),
+        'github_path': f'{chance.word()}/{chance.word()}-{chance.word()}'.lower(),
+        'php_version': chance.pickone(['>=8.1', '>=8.2']),
+        'composer_prefer_stable': chance.pickone(['true', 'false'])
     }
 
 
@@ -54,8 +60,8 @@ def test_bake_license(cookies: Cookies):
 
         readme = result.project_path.joinpath('README.md').read_text(encoding='utf-8')
 
-        assert context['project_name'] in readme
-        assert context['project_description'] in readme
+        assert context['package_name'] in readme
+        assert context['package_description'] in readme
 
         assert f'Copyright (C) {context["license_year"]} {context["license_fullname"]}' in readme
         assert license_stubs[context['license_id']] in readme
@@ -76,3 +82,26 @@ def test_bake_license(cookies: Cookies):
     readme = result.project_path.joinpath('README.md').read_text(encoding='utf-8')
     assert 'This is free and unencumbered software released into the public domain' in readme
     assert 'see [UNLICENSE](./UNLICENSE)' in readme
+
+
+def test_bake_composer_json(cookies: Cookies):
+    context = generate_context()
+    result = cookies.bake(extra_context=context)
+    assert not result.exception
+
+    with result.project_path.joinpath('composer.json').open('r', encoding='utf-8') as fp:
+        composer = json.load(fp)
+
+    assert composer['name'] == f'{context["package_vendor"]}/{context["package_name"]}'
+    assert composer['description'] == context['package_description']
+    assert composer['keywords'] == context['package_keywords'].split(',')
+    assert composer['type'] == context['package_type']
+    assert composer['prefer-stable'] == (context['composer_prefer_stable'] == 'true')
+    assert composer['license'] == context['license_id']
+    assert composer['homepage'] == f'https://github.com/{context["github_path"]}'
+    assert composer['support']['issues'] == f'https://github.com/{context["github_path"]}/issues'
+    assert composer['support']['security'] == f'https://github.com/{context["github_path"]}/security/policy'
+    assert composer['authors'] == [{'name': context['author_name'], 'email': context['author_email']}]
+    assert composer['require']['php'] == context['php_version']
+    assert composer['autoload']['psr-4'] == {f'{context["package_vendor"]}\\{context["package_name"]}\\': './src/'}
+    assert composer['autoload-dev']['psr-4'] == {f'{context["package_vendor"]}\\{context["package_name"]}\\tests\\': './tests/'}
